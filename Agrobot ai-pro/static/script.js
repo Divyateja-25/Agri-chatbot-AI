@@ -1,4 +1,3 @@
-
 document.addEventListener('DOMContentLoaded', () => {
   console.log('script loaded');
   const messages = document.getElementById('messages');
@@ -114,6 +113,84 @@ document.addEventListener('DOMContentLoaded', () => {
     messages.scrollTop = messages.scrollHeight;
   }
 
+  // === ▼▼▼ NEW FUNCTION 1 of 2: To render the Donut Chart ▼▼▼ ===
+  function renderDonutChart(canvasId, data) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    
+    // Get data from the object passed
+    // e.g., data = {"Green": 91.8, "Yellow": 3.0, "Brown": 0.5}
+    const labels = Object.keys(data);
+    const values = Object.values(data);
+    
+    // Map data labels to specific colors
+    const colorMap = {
+        'green': 'rgba(75, 192, 192, 0.8)',
+        'yellow': 'rgba(255, 206, 86, 0.8)',
+        'brown': 'rgba(153, 102, 255, 0.8)',
+        'default': 'rgba(201, 203, 207, 0.8)'
+    };
+
+    const backgroundColors = labels.map(label => {
+        const lowerLabel = label.toLowerCase().split(' ')[0]; // 'Green (healthy)' -> 'green'
+        return colorMap[lowerLabel] || colorMap.default;
+    });
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Color Analysis',
+                data: values,
+                backgroundColor: backgroundColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Leaf Color Composition (%)'
+                }
+            }
+        }
+    });
+  }
+
+  // === ▼▼▼ NEW FUNCTION 2 of 2: To add the chart to a new bubble ▼▼▼ ===
+  function addChartMessage(chartData) {
+    const el = document.createElement('div');
+    el.className = 'message bot';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    // Create a unique ID for the canvas
+    const canvasId = 'chart-' + Date.now();
+
+    // Set the inner HTML for the bubble
+    bubble.innerHTML = `
+      <div class="chart-container" style="width: 100%; max-width: 350px; height: 350px; margin: auto;">
+        <canvas id="${canvasId}"></canvas>
+      </div>
+    `;
+
+    el.appendChild(bubble);
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+
+    // Render the chart *after* it's in the DOM
+    renderDonutChart(canvasId, chartData);
+  }
+  
+  // === (Original functions continue below) ===
+
   function handleImageUpload(file) {
     return new Promise((resolve, reject) => {
       if (!file.type.startsWith('image/')) {
@@ -205,7 +282,17 @@ document.addEventListener('DOMContentLoaded', () => {
           const analysisResult = await analyzeImage(imageFile, msg);
 
           if (analysisResult.success) {
+            // Add the text part of the response
             addMessage('bot', analysisResult.response);
+
+            // === ▼▼▼ NEW CODE ADDED HERE ▼▼▼ ===
+            // Check if the server sent back data for the chart
+            if (analysisResult.color_data) {
+                // If yes, create the chart message
+                addChartMessage(analysisResult.color_data);
+            }
+            // === ▲▲▲ END OF NEW CODE ▲▲▲ ===
+
           } else {
             addMessage('bot', `Analysis completed with issues: ${analysisResult.error}`);
           }
@@ -284,4 +371,20 @@ document.addEventListener('DOMContentLoaded', () => {
       sendMessage();
     }
   });
+
+  // === ▼▼▼ NEW: Add event listeners for suggestion chips ▼▼▼ ===
+  const chips = document.querySelectorAll('.chip');
+  const chatInput = document.getElementById('msg'); // We already have this as 'input'
+
+  if (chips.length > 0 && input) {
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        // Set the chat input's value to the chip's text
+        input.value = chip.textContent;
+        input.focus(); // Focus the input box so the user can just press Enter
+      });
+    });
+  }
+  // === ▲▲▲ END OF NEW CODE ▲▲▲ ===
+
 });

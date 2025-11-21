@@ -1,6 +1,7 @@
 import os, json, time
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_babel import Babel  # Import Babel
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from database import init_db, db, User, ChatHistory
@@ -15,6 +16,20 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "super_secret_key")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+# === ▼▼▼ NEW: BABEL CONFIGURATION (FIXED) ▼▼▼ ===
+app.config['LANGUAGES'] = ['en', 'ml', 'ta']  # English, Malayalam, Tamil
+
+def get_locale():
+    # If user is logged in, use their saved preference
+    if current_user.is_authenticated:
+        return current_user.preferred_language
+    # Otherwise, use the best match from their browser's settings
+    return request.accept_languages.best_match(app.config['LANGUAGES'])
+
+# Initialize Babel with the locale selector function
+babel = Babel(app, locale_selector=get_locale)
+# === ▲▲▲ END OF NEW CODE ▲▲▲ ===
 
 # init DB & default admin
 init_db(app)
@@ -109,7 +124,7 @@ def api_chat():
             "id": current_user.id if current_user.is_authenticated else None,
             "primary_crop": current_user.primary_crop if current_user.is_authenticated else None,
             "region": current_user.region if current_user.is_authenticated else None,
-            "preferred_language": current_user.preferred_language if current_user.is_authenticated else None
+            "preferred_language": current_user.preferred_language if current_user.is_authenticated else get_locale()
         }
         reply = process_message(user_profile, message)
         reply = sanitize_output(reply)
@@ -300,11 +315,19 @@ def analyze_image():
             db.session.add(ch)
             db.session.commit()
 
+        # Format data for JavaScript chart
+        color_data_for_chart = {
+            "Green": analysis_result['analysis']['color_analysis']['green_percentage'],
+            "Yellow": analysis_result['analysis']['color_analysis']['yellow_percentage'],
+            "Brown": analysis_result['analysis']['color_analysis']['brown_percentage']
+        }
+
         return jsonify({
             "success": True,
             "response": analysis_result['response'],
             "analysis": analysis_result['analysis'],
-            "image_info": image_info
+            "image_info": image_info,
+            "color_data": color_data_for_chart
         })
 
     except Exception as e:
@@ -375,9 +398,9 @@ def generate_image_response(analysis, user_question, image_format):
     response_parts.append(f"• **Health Status**: {analysis['health_status']} (confidence: {analysis['confidence']})")
     response_parts.append(f"• **Image Size**: {analysis['dimensions']} pixels")
     response_parts.append(f"• **Color Analysis**:")
-    response_parts.append(f"  - Green: {analysis['color_analysis']['green_percentage']}% (healthy vegetation)")
-    response_parts.append(f"  - Brown: {analysis['color_analysis']['brown_percentage']}% (dry/soil)")
-    response_parts.append(f"  - Yellow: {analysis['color_analysis']['yellow_percentage']}% (potential stress)")
+    response_parts.append(f"  - Green: {analysis['color_analysis']['green_percentage']}% (healthy vegetation)")
+    response_parts.append(f"  - Brown: {analysis['color_analysis']['brown_percentage']}% (dry/soil)")
+    response_parts.append(f"  - Yellow: {analysis['color_analysis']['yellow_percentage']}% (potential stress)")
 
     # Add agricultural advice based on analysis
     response_parts.append("\n**Agricultural Insights:**")
@@ -385,18 +408,18 @@ def generate_image_response(analysis, user_question, image_format):
     if analysis['health_status'] == "HEALTHY":
         response_parts.append("✅ Plants appear healthy with good green coverage. Maintain current practices.")
     elif analysis['health_status'] == "MODERATE":
-        response_parts.append("⚠️  Plants show some stress. Check water levels and look for pest signs.")
+        response_parts.append("⚠️  Plants show some stress. Check water levels and look for pest signs.")
     else:
         response_parts.append("🚨 Plants show significant stress. Consider:")
-        response_parts.append("   - Checking soil moisture")
-        response_parts.append("   - Inspecting for diseases/pests")
-        response_parts.append("   - Reviewing fertilizer application")
+        response_parts.append("   - Checking soil moisture")
+        response_parts.append("   - Inspecting for diseases/pests")
+        response_parts.append("   - Reviewing fertilizer application")
 
     if analysis['color_analysis']['yellow_percentage'] > 20:
         response_parts.append("\n💡 High yellow percentage may indicate:")
-        response_parts.append("   - Nutrient deficiency (nitrogen)")
-        response_parts.append("   - Water stress")
-        response_parts.append("   - Pest damage")
+        response_parts.append("      - Nutrient deficiency (nitrogen)")
+        response_parts.append("      - Water stress")
+        response_parts.append("      - Pest damage")
 
     response_parts.append("\n*Note: This is automated analysis. Consult agricultural expert for precise diagnosis.*")
 
